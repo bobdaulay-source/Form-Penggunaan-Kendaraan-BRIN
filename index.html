@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Form Kendaraan BRIN – TTD Bertahap + Save to Drive</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;background:#f8f9fa;margin:0;padding:0;color:#111}
+  .wrapper{max-width:960px;margin:20px auto;padding:15px}
+  .card{background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.05);padding:20px}
+  .header{display:flex;gap:12px;align-items:center;margin-bottom:10px;border-bottom:2px solid #000;padding-bottom:10px}
+  .header img{width:80px;height:80px;object-fit:contain}
+  .titles h1{margin:0;font-size:20px}
+  .titles p{margin:2px 0 0 0;font-size:13px;color:#555}
+  label{font-size:13px;margin:6px 0;display:block}
+  input,textarea,select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+  textarea{min-height:70px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .full{grid-column:1/-1}
+  .hidden{display:none}
+  .sig{border:1px solid #aaa;padding:8px;border-radius:6px;background:#fafafa}
+  .sig h4{margin:4px 0;font-size:14px}
+  canvas{width:100%;height:140px;border:1px solid #ccc;border-radius:6px;background:#fff;touch-action:none}
+  .sig-controls{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .sig-meta{font-size:12px;color:#555}
+  .actions{margin-top:15px;display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+  button{padding:10px 14px;border-radius:8px;border:1px solid #ccc;background:#eee;cursor:pointer}
+  button.primary{background:#0b57d0;color:#fff;border-color:#0b57d0}
+  button.warn{background:#fff0f0;color:#900;border-color:#f5c2c7}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  @media print{.actions,.drive{display:none}body{background:#fff}.card{box-shadow:none;border:none}}
+  .drive{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .note{font-size:12px;color:#555;margin:8px 0}
+  .blocked{opacity:.6;pointer-events:none}
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card">
+    <div class="header">
+      <!-- Ganti ke base64 logo BRIN resmi jika perlu -->
+      <img alt="Logo BRIN" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=">
+      <div class="titles">
+        <h1>Formulir Penggunaan Kendaraan Dinas BRIN</h1>
+        <p>Biro Komunikasi Publikasi Umum dan Kesekretariatan</p>
+      </div>
+    </div>
+
+    <div class="drive">
+      <button id="btnLogin" class="primary">Login Google</button>
+      <button id="btnSaveHtml" disabled>Simpan ke Drive (HTML)</button>
+      <button id="btnSaveJson" disabled>Simpan ke Drive (JSON)</button>
+      <button id="btnPDF" class="primary" disabled>Cetak PDF</button>
+    </div>
+    <div class="note" id="who"></div>
+
+    <div class="row">
+      <div><label>Nama</label><input name="nama"></div>
+      <div><label>NIP</label><input name="nip"></div>
+      <div><label>Unit Kerja</label><input name="unit"></div>
+      <div><label>Kontak</label><input name="kontak"></div>
+    </div>
+
+    <div class="row">
+      <div><label>Jenis Kendaraan/Merk</label><input name="jenis"></div>
+      <div><label>No. Polisi</label><input name="nopol"></div>
+    </div>
+
+    <div class="row">
+      <div class="full"><label>Keperluan</label><textarea name="keperluan"></textarea></div>
+    </div>
+
+    <div class="row">
+      <div><label>Tujuan</label><input name="tujuan"></div>
+      <div>
+        <label>Pengemudi</label>
+        <select name="driver" id="driver">
+          <option value="">Pilih</option>
+          <option value="Dengan Pengemudi">Dengan Pengemudi</option>
+          <option value="Tanpa Pengemudi">Tanpa Pengemudi</option>
+        </select>
+      </div>
+      <div id="driverNameWrap" class="full hidden">
+        <label>Nama Pengemudi</label>
+        <input name="nama_pengemudi" id="nama_pengemudi" placeholder="Nama pengemudi">
+      </div>
+    </div>
+
+    <div class="row">
+      <div><label>Tanggal Pakai</label><input type="date" name="tgl_pakai"></div>
+      <div><label>Jam Pakai</label><input type="time" name="jam_pakai"></div>
+      <div><label>Tanggal Kembali</label><input type="date" name="tgl_kembali"></div>
+      <div><label>Jam Kembali</label><input type="time" name="jam_kembali"></div>
+    </div>
+
+    <h3>Tanda Tangan (berurutan: Peminjam → PIC → Mengetahui)</h3>
+    <div class="row-3">
+      <div class="sig" id="block_peminjam">
+        <h4>Peminjam</h4>
+        <canvas id="sig_peminjam"></canvas>
+        <div class="sig-controls">
+          <input name="peminjam_nama" placeholder="Nama Peminjam">
+          <button type="button" data-clear="sig_peminjam" class="warn">Reset</button>
+          <button type="button" id="lock_peminjam" class="primary">Kunci TTD Peminjam</button>
+        </div>
+        <div class="sig-meta" id="meta_peminjam"></div>
+      </div>
+      <div class="sig blocked" id="block_pic">
+        <h4>PIC/Pengemudi</h4>
+        <canvas id="sig_pic"></canvas>
+        <div class="sig-controls">
+          <input name="pic_nama" placeholder="Nama PIC/Pengemudi">
+          <button type="button" data-clear="sig_pic" class="warn">Reset</button>
+          <button type="button" id="lock_pic" class="primary" disabled>Kunci TTD PIC</button>
+        </div>
+        <div class="sig-meta" id="meta_pic"></div>
+      </div>
+      <div class="sig blocked" id="block_mengetahui">
+        <h4>Mengetahui</h4>
+        <canvas id="sig_mengetahui"></canvas>
+        <div class="sig-controls">
+          <input name="mengetahui_nama" placeholder="Nama Pejabat Mengetahui">
+          <button type="button" data-clear="sig_mengetahui" class="warn">Reset</button>
+          <button type="button" id="lock_mengetahui" class="primary" disabled>Kunci TTD Mengetahui</button>
+        </div>
+        <div class="sig-meta" id="meta_mengetahui"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="btnSimpanLocal">Simpan Lokal</button>
+      <button type="button" id="btnMuatLocal">Muat Lokal</button>
+      <button type="button" id="btnBersihkan" class="warn">Bersihkan</button>
+    </div>
+
+    <div class="note">
+      Simpan Lokal = ke perangkat (localStorage). Cetak/Save Drive aktif setelah tiga TTD terkunci.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== CORE FORM ====== */
+const storageKey='Form_Kendaraan_TTD_Workflow';
+function toggleDriverName(){
+  const sel=document.getElementById('driver');
+  const wrap=document.getElementById('driverNameWrap');
+  const input=document.getElementById('nama_pengemudi');
+  if(sel.value==='Dengan Pengemudi'){ wrap.classList.remove('hidden'); }
+  else{ wrap.classList.add('hidden'); input.value=''; }
+}
+document.getElementById('driver').addEventListener('change', toggleDriverName);
+
+function serialize(){
+  const data={};
+  document.querySelectorAll('input,textarea,select').forEach(el=>{
+    if(!el.name) return;
+    if(el.type==='checkbox') data[el.name]=el.checked;
+    else if(el.type==='radio'){ if(el.checked) data[el.name]=el.value; }
+    else data[el.name]=el.value;
+  });
+  ['peminjam','pic','mengetahui'].forEach(role=>{
+    const c=document.getElementById('sig_'+role);
+    data['sig_'+role]=c._img || (c._dirty ? c.toDataURL('image/png') : '');
+    data['lock_'+role]=!!c._locked;
+    data['meta_'+role]=document.getElementById('meta_'+role).textContent||'';
+  });
+  data._saved_at = new Date().toISOString();
+  return data;
+}
+function fill(d){
+  Object.entries(d||{}).forEach(([k,v])=>{
+    const el=document.querySelector('[name="'+k+'"]');
+    if(el){ el.value=v; }
+  });
+  ['peminjam','pic','mengetahui'].forEach(role=>{
+    if(d && d['sig_'+role]){
+      const c=document.getElementById('sig_'+role);
+      const ctx=c.getContext('2d'); const img=new Image();
+      img.onload=()=>{ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height); c._img=d['sig_'+role]; c._dirty=false;};
+      img.src=d['sig_'+role];
+    }
+    if(d && d['meta_'+role]) document.getElementById('meta_'+role).textContent=d['meta_'+role];
+    if(d && d['lock_'+role]) lockCanvas(role,true);
+  });
+  toggleDriverName();
+  updateWorkflowButtons();
+}
+document.getElementById('btnSimpanLocal').onclick=()=>{ localStorage.setItem(storageKey, JSON.stringify(serialize())); alert('Tersimpan ke perangkat.'); };
+document.getElementById('btnMuatLocal').onclick=()=>{ const d=localStorage.getItem(storageKey); if(d) fill(JSON.parse(d)); };
+document.getElementById('btnBersihkan').onclick=()=>{ if(confirm('Bersihkan semua (termasuk status kunci)?')) { localStorage.removeItem(storageKey); location.reload(); } };
+
+/* ====== CANVAS ====== */
+function initCanvas(id){
+  const c=document.getElementById(id); const ctx=c.getContext('2d');
+  function resize(){ const r=window.devicePixelRatio||1; c.width=c.clientWidth*r; c.height=c.clientHeight*r; ctx.setTransform(r,0,0,r,0,0); }
+  resize(); window.addEventListener('resize', resize);
+  let drawing=false,last=null;
+  const pos=e=>{const r=c.getBoundingClientRect(); if(e.touches) e=e.touches[0]; return {x:e.clientX-r.left,y:e.clientY-r.top};};
+  const line=(p1,p2)=>{ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();};
+  c.addEventListener('mousedown',e=>{ if(c._locked) return; drawing=true; last=pos(e);});
+  c.addEventListener('mousemove',e=>{ if(!drawing||c._locked) return; const p=pos(e); line(last,p); last=p; c._dirty=true;});
+  ['mouseup','mouseleave'].forEach(ev=>c.addEventListener(ev,()=>drawing=false));
+  c.addEventListener('touchstart',e=>{ if(c._locked) return; drawing=true; last=pos(e); e.preventDefault();});
+  c.addEventListener('touchmove',e=>{ if(!drawing||c._locked) return; const p=pos(e); line(last,p); last=p; c._dirty=true; e.preventDefault();});
+  c.addEventListener('touchend',()=>{drawing=false;});
+}
+['sig_peminjam','sig_pic','sig_mengetahui'].forEach(initCanvas);
+
+/* ====== WORKFLOW LOCK ====== */
+function nowID(){ const z=new Date(); const pad=n=>String(n).padStart(2,'0'); return `${z.getFullYear()}-${pad(z.getMonth()+1)}-${pad(z.getDate())} ${pad(z.getHours())}:${pad(z.getMinutes())}`; }
+function lockCanvas(role, restoring=false){
+  const c=document.getElementById('sig_'+role);
+  if(!restoring){
+    const nameField = document.querySelector(role==='peminjam' ? '[name="peminjam_nama"]' :
+                    role==='pic' ? '[name="pic_nama"]' : '[name="mengetahui_nama"]');
+    if(!nameField.value.trim()){ alert('Isi nama terlebih dahulu.'); return; }
+    if(!c._dirty && !c._img){ alert('TTD belum diisi.'); return; }
+    c._img = c.toDataURL('image/png');
+    document.getElementById('meta_'+role).textContent = `Terkunci oleh ${nameField.value} pada ${nowID()}`;
+  }
+  c._locked = true;
+  const wrap = document.getElementById('block_'+role);
+  wrap.classList.add('blocked');
+  wrap.querySelectorAll('input,button,[data-clear]').forEach(el=>{ el.disabled=true; });
+  if(role==='peminjam'){ unlockBlock('pic'); }
+  if(role==='pic'){ unlockBlock('mengetahui'); }
+  updateWorkflowButtons();
+  if(!restoring){ localStorage.setItem(storageKey, JSON.stringify(serialize())); }
+}
+function unlockBlock(role){
+  const wrap = document.getElementById('block_'+role);
+  wrap.classList.remove('blocked');
+  wrap.querySelectorAll('input,button').forEach(el=>{ el.disabled=false; });
+}
+function updateWorkflowButtons(){
+  const allLocked = ['peminjam','pic','mengetahui'].every(r=>document.getElementById('sig_'+r)._locked);
+  document.getElementById('btnPDF').disabled = !allLocked;
+  document.getElementById('btnSaveHtml').disabled = !allLocked || !window._driveReady;
+  document.getElementById('btnSaveJson').disabled = !allLocked || !window._driveReady;
+  document.getElementById('lock_peminjam').disabled = false;
+  document.getElementById('lock_pic').disabled = !document.getElementById('sig_peminjam')._locked;
+  document.getElementById('lock_mengetahui').disabled = !document.getElementById('sig_pic')._locked;
+}
+document.getElementById('lock_peminjam').onclick=()=>lockCanvas('peminjam');
+document.getElementById('lock_pic').onclick=()=>lockCanvas('pic');
+document.getElementById('lock_mengetahui').onclick=()=>lockCanvas('mengetahui');
+
+document.querySelectorAll('[data-clear]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const id = btn.dataset.clear; const c=document.getElementById(id);
+    if(c._locked){ alert('Sudah terkunci. Tidak bisa reset.'); return; }
+    c.getContext('2d').clearRect(0,0,c.width,c.height);
+    c._dirty=false; c._img='';
+  });
+});
+
+/* ====== CETAK PDF ====== */
+document.getElementById('btnPDF').onclick=()=>{ window.print(); };
+
+/* ====== BOOT ====== */
+function boot(){
+  ['sig_peminjam','sig_pic','sig_mengetahui'].forEach(id=>{
+    const c=document.getElementById(id), ctx=c.getContext('2d');
+    const r=window.devicePixelRatio||1; c.width=c.clientWidth*r; c.height=c.clientHeight*r; ctx.setTransform(r,0,0,r,0,0);
+  });
+  const d=localStorage.getItem(storageKey); if(d) fill(JSON.parse(d));
+  updateWorkflowButtons();
+}
+document.addEventListener('DOMContentLoaded', boot);
+document.getElementById('driver').dispatchEvent(new Event('change'));
+
+/* ====== GOOGLE DRIVE (OAuth + Upload) ====== */
+const CLIENT_ID='327668994390-p616f0mfe1got8p50cjejaa4js706dn2.apps.googleusercontent.com';
+const SCOPES='https://www.googleapis.com/auth/drive.file openid email profile';
+let accessToken=null, tokenClient=null; window._driveReady=false;
+
+function ensureToken(cb){
+  if(accessToken){ cb(); return; }
+  tokenClient = tokenClient || google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES,
+    callback: (resp)=>{ 
+      if(resp && resp.access_token){ 
+        accessToken=resp.access_token; 
+        window._driveReady=true; 
+        document.getElementById('who').textContent='Login OK. Siap simpan ke Drive.'; 
+        updateWorkflowButtons(); 
+        cb(); 
+      } else alert('Login gagal.');
+    }
+  });
+  tokenClient.requestAccessToken({prompt:'consent'});
+}
+document.getElementById('btnLogin').onclick=()=>ensureToken(()=>{});
+
+async function driveFetch(url, opts={}){
+  const res = await fetch(url, { ...opts, headers:{ 'Authorization':'Bearer '+accessToken, ...(opts.headers||{}) }});
+  if(!res.ok){ throw new Error(await res.text()); }
+  return res;
+}
+async function ensureFolder(name='Form Kendaraan BRIN'){
+  const q = encodeURIComponent(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`); 
+  const j=await r.json();
+  if(j.files && j.files.length) return j.files[0].id;
+  const cr = await driveFetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name, mimeType:'application/vnd.google-apps.folder'})});
+  return (await cr.json()).id;
+}
+function buildSnapshotHTML(){
+  const data=serialize();
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const sig=(k,l)=> data[k]?`<div><b>${l}</b><br><img style="border:1px solid #ccc;border-radius:6px;max-width:100%;height:120px" src="${data[k]}"></div>`:'';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Form Kendaraan BRIN – Final</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;margin:24px}h1{font-size:20px;margin:0 0 8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}</style></head><body>
+  <h1>Formulir Penggunaan Kendaraan Dinas BRIN</h1>
+  <table>
+  <tr><th>Nama</th><td>${esc(data.nama)}</td></tr>
+  <tr><th>NIP</th><td>${esc(data.nip)}</td></tr>
+  <tr><th>Unit Kerja</th><td>${esc(data.unit)}</td></tr>
+  <tr><th>Kontak</th><td>${esc(data.kontak)}</td></tr>
+  <tr><th>Jenis Kendaraan/Merk</th><td>${esc(data.jenis)}</td></tr>
+  <tr><th>No. Polisi</th><td>${esc(data.nopol)}</td></tr>
+  <tr><th>Keperluan</th><td>${esc(data.keperluan)}</td></tr>
+  <tr><th>Tujuan</th><td>${esc(data.tujuan)}</td></tr>
+  <tr><th>Pengemudi</th><td>${esc(data.driver)}</td></tr>
+  <tr><th>Nama Pengemudi</th><td>${esc(data.nama_pengemudi)}</td></tr>
+  <tr><th>Tanggal Pakai</th><td>${esc(data.tgl_pakai)}</td></tr>
+  <tr><th>Jam Pakai</th><td>${esc(data.jam_pakai)}</td></tr>
+  <tr><th>Tanggal Kembali</th><td>${esc(data.tgl_kembali)}</td></tr>
+  <tr><th>Jam Kembali</th><td>${esc(data.jam_kembali)}</td></tr>
+  </table>
+  <h3>Tanda Tangan</h3>
+  ${sig('sig_peminjam','Peminjam')}<br>
+  ${sig('sig_pic','PIC/Pengemudi')}<br>
+  ${sig('sig_mengetahui','Mengetahui')}<br>
+  <div style="margin-top:8px;font-size:12px;color:#666">
+   ${esc(document.getElementById('meta_peminjam').textContent)}<br>
+   ${esc(document.getElementById('meta_pic').textContent)}<br>
+   ${esc(document.getElementById('meta_mengetahui').textContent)}
+  </div>
+  </body></html>`;
+}
+async function uploadMultipart({name, mimeType, content, parents=[]}){
+  const meta = { name, mimeType, parents };
+  const boundary='-------314159265358979323846';
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`+
+               JSON.stringify(meta)+`\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`+
+               content+`\r\n--${boundary}--`;
+  const r = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+boundary},body});
+  return r.json();
+}
+document.getElementById('btnSaveHtml').onclick=()=>{
+  ensureToken(async ()=>{
+    const allLocked=['peminjam','pic','mengetahui'].every(r=>document.getElementById('sig_'+r)._locked);
+    if(!allLocked){ alert('Tiga TTD belum lengkap.'); return; }
+    const folderId=await ensureFolder();
+    const html=buildSnapshotHTML();
+    const fname=`Form_Kendaraan_BRIN_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.html`;
+    const res=await uploadMultipart({name:fname,mimeType:'text/html',content:html,parents:[folderId]});
+    alert('Tersimpan ke Drive: '+(res.webViewLink||res.name));
+  });
+};
+document.getElementById('btnSaveJson').onclick=()=>{
+  ensureToken(async ()=>{
+    const folderId=await ensureFolder();
+    const data=serialize();
+    const fname=`Form_Kendaraan_BRIN_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    const res=await uploadMultipart({name:fname,mimeType:'application/json',content:JSON.stringify(data,null,2),parents:[folderId]});
+    alert('JSON tersimpan ke Drive: '+(res.webViewLink||res.name));
+  });
+};
+</script>
+</body>
+</html>
